@@ -485,14 +485,17 @@ body.sf-ready .mob-nav { display: flex !important; }
 
 <!-- ══ PROFILE SCREEN ══ -->
 <div id="profileScreen">
-  <div class="ps-logo">🎬 StreamFamily</div>
-  <div class="ps-sub" id="psLoadMsg">טוען נתונים...</div>
-  <div style="margin-top:2rem;font-size:2rem;animation:spin 1s linear infinite" id="psSpinner">⏳</div>
-  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-  <div class="ps-logo">🎬 StreamFamily</div>
-  <div class="ps-sub" id="psSub">מי צופה עכשיו?</div>
-  <div class="ps-grid" id="psGrid"></div>
-  <div style="font-size:0.75rem;color:var(--muted)">לחץ על הפרופיל שלך כדי להיכנס</div>
+  <div id="psLoadArea" style="display:flex;flex-direction:column;align-items:center;gap:1rem">
+    <div class="ps-logo">🎬 StreamFamily</div>
+    <div style="color:var(--muted);font-size:0.88rem">טוען נתונים...</div>
+    <div style="font-size:2rem">⏳</div>
+  </div>
+  <div id="psMainArea" style="display:none;flex-direction:column;align-items:center;width:100%">
+    <div class="ps-logo">🎬 StreamFamily</div>
+    <div class="ps-sub">מי צופה עכשיו?</div>
+    <div class="ps-grid" id="psGrid"></div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem">לחץ על הפרופיל שלך כדי להיכנס</div>
+  </div>
 </div>
 
 <!-- ══ LOCK PROFILE PIN ══ -->
@@ -1004,6 +1007,10 @@ function listenForUpdates() {
 //  PROFILE SCREEN
 // ══════════════════════════════════════════════
 function renderProfileScreen() {
+  const loading = document.getElementById('psLoadArea');
+  const main = document.getElementById('psMainArea');
+  if (loading) loading.style.display = 'none';
+  if (main) main.style.display = 'flex';
   const grid = document.getElementById('psGrid');
   if (!grid) return;
   if (!grid) return;
