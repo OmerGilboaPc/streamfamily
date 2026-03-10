@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>🎬 StreamFamily</title>
-<script type="module">
+<script type="module" onerror="console.warn('Firebase module failed');document.dispatchEvent(new Event('firebaseReady'))">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
@@ -32,7 +32,8 @@
 
   // Signal that Firebase is ready
   window.firebaseReady = true;
-  document.dispatchEvent(new Event('firebaseReady'));
+  // Small delay to ensure DOM is ready
+  setTimeout(() => document.dispatchEvent(new Event('firebaseReady')), 100);
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -476,7 +477,11 @@ nav.scrolled{background:rgba(7,7,16,0.97);backdrop-filter:blur(16px);box-shadow:
 <!-- ══ PROFILE SCREEN ══ -->
 <div id="profileScreen">
   <div class="ps-logo">🎬 StreamFamily</div>
-  <div class="ps-sub">מי צופה עכשיו?</div>
+  <div class="ps-sub" id="psLoadMsg">טוען נתונים...</div>
+  <div style="margin-top:2rem;font-size:2rem;animation:spin 1s linear infinite" id="psSpinner">⏳</div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <div class="ps-logo">🎬 StreamFamily</div>
+  <div class="ps-sub" id="psSub">מי צופה עכשיו?</div>
   <div class="ps-grid" id="psGrid"></div>
   <div style="font-size:0.75rem;color:var(--muted)">לחץ על הפרופיל שלך כדי להיכנס</div>
 </div>
@@ -916,7 +921,7 @@ let progTimer = null;
 // ══════════════════════════════════════════════
 //  PERSIST — Firebase Realtime Database
 // ══════════════════════════════════════════════
-function fbPath(path) { return window.fbRef(window.fbDb, path); }
+function fbPath(path) { return window.fbRef(path); }
 
 async function save() {
   if (!window.fbDb) return;
@@ -943,7 +948,7 @@ async function load() {
   if (!window.fbDb) return;
   try {
     const snap = await window.fbGet(fbPath('shared'));
-    if (snap.exists()) {
+    if (snap && snap.val()) {
       const d = snap.val();
       if (d.adminUser) adminUser = d.adminUser;
       if (d.adminPass) adminPass = d.adminPass;
@@ -956,7 +961,7 @@ async function load() {
     }
     // Load all userdata
     const udSnap = await window.fbGet(fbPath('userdata'));
-    if (udSnap.exists()) {
+    if (udSnap && udSnap.val()) {
       const ud = udSnap.val();
       for (const [uid, data] of Object.entries(ud)) {
         if (data.favs) favs[uid] = new Set(data.favs);
@@ -970,7 +975,7 @@ async function load() {
 function listenForUpdates() {
   if (!window.fbDb) return;
   window.fbOnValue(fbPath('shared/lib'), (snap) => {
-    if (snap.exists()) {
+    if (snap && snap.val()) {
       const newLib = snap.val();
       if (JSON.stringify(newLib) !== JSON.stringify(lib)) {
         lib = newLib;
@@ -979,7 +984,7 @@ function listenForUpdates() {
     }
   });
   window.fbOnValue(fbPath('shared/notifs'), (snap) => {
-    if (snap.exists()) {
+    if (snap && snap.val()) {
       notifs = snap.val();
       renderNotifs();
     }
@@ -991,6 +996,8 @@ function listenForUpdates() {
 // ══════════════════════════════════════════════
 function renderProfileScreen() {
   const grid = document.getElementById('psGrid');
+  if (!grid) return;
+  if (!grid) return;
   let html = '';
   // Admin tile
   html += `<div class="ps-profile" onclick="loginAsAdmin()">
@@ -1027,25 +1034,8 @@ function loginAsAdmin() {
   oo('ovLogin');
   setTimeout(() => document.getElementById('inU').focus(), 300);
 }
-function loginAsUser(id) {
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  if (u.pass) {
-    document.getElementById('pinTitle').textContent = `🔒 כניסה כ-${u.name}`;
-    document.getElementById('pinInput').value = '';
-    document.getElementById('pinErr').classList.remove('on');
-    lockCallback = () => enterAsUser(u);
-    oo('ovPin');
-  } else enterAsUser(u);
-}
-function tryPin() {
-  const val = document.getElementById('pinInput').value;
-  // Find pending user (from lockCallback context) — check against user pass
-  // We stored callback; but we need to know which user. Use a temp var:
-  if (lockCallback) {
-    lockCallback(val);
-  }
-}
+// (removed duplicate)
+// (removed duplicate tryPin)
 // Override tryPin to be smarter — store pending user id
 let pinUserId = null;
 function loginAsUser(id) {
@@ -2059,24 +2049,31 @@ function toast(msg, type = 's') {
 async function init() {
   applyStoredTheme();
   // Show loading state
-  document.getElementById('profileScreen').innerHTML = `
-    <div class="ps-logo">🎬 StreamFamily</div>
-    <div class="ps-sub" style="margin-top:1rem">טוען נתונים...</div>
-    <div style="margin-top:2rem;font-size:2rem;animation:spin 1s linear infinite">⏳</div>
-    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-  `;
-  // Wait for Firebase to be ready
+  // Loading overlay - don't touch profileScreen
+  const loadDiv = document.createElement('div');
+  loadDiv.id = 'loadingOverlay';
+  loadDiv.style.cssText = 'position:fixed;inset:0;z-index:2000;background:#070710;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;';
+  loadDiv.innerHTML = '<div style="font-size:1.8rem;font-weight:900;color:#fff;">🎬 StreamFamily</div><div style="color:#7878a0;font-size:0.88rem;">טוען נתונים...</div><div style="font-size:2rem;animation:spin 1s linear infinite">⏳</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+  document.body.appendChild(loadDiv);
+  // Wait for Firebase - max 5 seconds then continue anyway
   await new Promise(resolve => {
     if (window.firebaseReady) return resolve();
     document.addEventListener('firebaseReady', resolve, { once: true });
-    setTimeout(resolve, 3000); // fallback timeout
+    setTimeout(resolve, 5000);
   });
-  await load();
-  listenForUpdates();
+  try { await load(); } catch(e) { console.warn('Load failed, continuing:', e); }
+  try { listenForUpdates(); } catch(e) {}
   renderProfileScreen();
   renderGrid(); updateStats(); renderCW(); renderNotifs();
 }
-init();
+// Wait for DOM
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
+</body>
+
 </body>
 </html>
