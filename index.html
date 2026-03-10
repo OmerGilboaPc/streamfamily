@@ -907,6 +907,8 @@ body.sf-ready .mob-nav { display: flex !important; }
 const LS = 'sf_v5';
 const ADMIN_UID = 'zgrs4HR0A7fJHqiGoZXm8QdNc5B3';
 const ADMIN_EMAIL = 'omergilboapc@gmail.com';
+let adminUser = ADMIN_EMAIL;
+let adminPass = '';
 let firebaseAuthUser = null; // Firebase Auth user object
 let isAdmin = false;
 let currentUser = null; // {id,name,avatar,color,pass}
@@ -987,22 +989,33 @@ async function load() {
   } catch(e) { console.warn('Firebase load error:', e); }
 }
 
-// Listen for real-time updates to lib/users (so all users see new content instantly)
+// Listen for real-time updates so all users see changes instantly
 function listenForUpdates() {
   if (!window.fbDb) return;
-  window.fbOnValue(fbPath('shared/lib'), (snap) => {
-    if (snap && snap.val()) {
-      const newLib = snap.val();
-      if (JSON.stringify(newLib) !== JSON.stringify(lib)) {
-        lib = newLib;
-        renderGrid(); updateStats();
-      }
+  window.fbOnValue(fbPath('shared'), (snap) => {
+    const data = snap && snap.val();
+    if (!data) return;
+
+    users = Array.isArray(data.users) ? data.users : users;
+    lib = Array.isArray(data.lib) ? data.lib : lib;
+    nid = typeof data.nid === 'number' ? data.nid : nid;
+    notifs = Array.isArray(data.notifs) ? data.notifs : notifs;
+    requests = Array.isArray(data.requests) ? data.requests : requests;
+    recommendations = data.recommendations || recommendations;
+
+    renderProfileScreen();
+    renderGrid();
+    renderCW();
+    renderNotifs();
+    updateStats();
+
+    if (document.getElementById('dashPage')?.classList.contains('open')) {
+      renderDashStats();
+      renderDashUsers();
+      renderDashRequests();
     }
-  });
-  window.fbOnValue(fbPath('shared/notifs'), (snap) => {
-    if (snap && snap.val()) {
-      notifs = snap.val();
-      renderNotifs();
+    if (document.getElementById('reqPage')?.classList.contains('open')) {
+      renderReqList();
     }
   });
 }
@@ -1016,7 +1029,6 @@ function renderProfileScreen() {
   if (loading) loading.style.display = 'none';
   if (main) main.style.display = 'flex';
   const grid = document.getElementById('psGrid');
-  if (!grid) return;
   if (!grid) return;
   let html = '';
   // Admin tile
@@ -2088,6 +2100,12 @@ async function init() {
           hideProfileScreen();
           setupNavForUser();
           toast('✅ ברוך הבא, Admin!', 's');
+        } else if (!user && isAdmin) {
+          firebaseAuthUser = null;
+          isAdmin = false;
+          currentUser = null;
+          document.body.classList.remove('admin-mode');
+          showProfileScreen();
         }
       });
     } catch(e) {}
@@ -2102,7 +2120,5 @@ if (document.readyState === 'loading') {
   init();
 }
 </script>
-</body>
-
 </body>
 </html>
