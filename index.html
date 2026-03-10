@@ -474,6 +474,14 @@ nav.scrolled{background:rgba(7,7,16,0.97);backdrop-filter:blur(16px);box-shadow:
 </style>
 </head>
 <body>
+<style>
+#nav, .hero, .main, .fab-wrap, .mob-nav { display: none !important; }
+body.sf-ready #nav { display: flex !important; }
+body.sf-ready .hero { display: flex !important; }
+body.sf-ready .main { display: block !important; }
+body.sf-ready .fab-wrap { display: block !important; }
+body.sf-ready .mob-nav { display: flex !important; }
+</style>
 
 <!-- ══ PROFILE SCREEN ══ -->
 <div id="profileScreen">
@@ -2049,22 +2057,17 @@ function toast(msg, type = 's') {
 // ══════════════════════════════════════════════
 async function init() {
   applyStoredTheme();
-  // Start loading Firebase in background, show site immediately after 1.5s max
-  const firebaseTimeout = new Promise(resolve => setTimeout(resolve, 1500));
-  const firebaseLoad = new Promise(resolve => {
+  // Wait for Firebase max 4 seconds
+  await new Promise(resolve => {
     if (window.firebaseReady) return resolve();
     document.addEventListener('firebaseReady', resolve, { once: true });
+    setTimeout(resolve, 4000);
   });
-  // Race: whichever comes first
-  await Promise.race([firebaseLoad, firebaseTimeout]);
-  // Try to load data if Firebase is ready
   if (window.fbDb) {
     try { await load(); } catch(e) { console.warn('Firebase load error:', e); }
     try { listenForUpdates(); } catch(e) {}
   }
-  // Remove loading overlay
-  const ov = document.getElementById('loadingOverlay');
-  if (ov) ov.remove();
+  document.body.classList.add('sf-ready');
   renderProfileScreen();
   renderGrid(); updateStats(); renderCW(); renderNotifs();
 }
