@@ -2049,25 +2049,25 @@ function toast(msg, type = 's') {
 // ══════════════════════════════════════════════
 async function init() {
   applyStoredTheme();
-  // Show loading state
-  // Loading overlay - don't touch profileScreen
-  const loadDiv = document.createElement('div');
-  loadDiv.id = 'loadingOverlay';
-  loadDiv.style.cssText = 'position:fixed;inset:0;z-index:2000;background:#070710;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;';
-  loadDiv.innerHTML = '<div style="font-size:1.8rem;font-weight:900;color:#fff;">🎬 StreamFamily</div><div style="color:#7878a0;font-size:0.88rem;">טוען נתונים...</div><div style="font-size:2rem;animation:spin 1s linear infinite">⏳</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
-  document.body.appendChild(loadDiv);
-  // Wait for Firebase - max 5 seconds then continue anyway
-  await new Promise(resolve => {
+  // Start loading Firebase in background, show site immediately after 1.5s max
+  const firebaseTimeout = new Promise(resolve => setTimeout(resolve, 1500));
+  const firebaseLoad = new Promise(resolve => {
     if (window.firebaseReady) return resolve();
     document.addEventListener('firebaseReady', resolve, { once: true });
-    setTimeout(resolve, 5000);
   });
-  try { await load(); } catch(e) { console.warn('Load failed, continuing:', e); }
-  try { listenForUpdates(); } catch(e) {}
+  // Race: whichever comes first
+  await Promise.race([firebaseLoad, firebaseTimeout]);
+  // Try to load data if Firebase is ready
+  if (window.fbDb) {
+    try { await load(); } catch(e) { console.warn('Firebase load error:', e); }
+    try { listenForUpdates(); } catch(e) {}
+  }
+  // Remove loading overlay
+  const ov = document.getElementById('loadingOverlay');
+  if (ov) ov.remove();
   renderProfileScreen();
   renderGrid(); updateStats(); renderCW(); renderNotifs();
 }
-// Wait for DOM
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
