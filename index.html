@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>🎬 StreamFamily</title>
-<script type="module" onerror="console.warn('Firebase module failed');document.dispatchEvent(new Event('firebaseReady'))">
+<script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyA3nOz8C4t-Ifx2ekd6zZBLSV-gZpxhQJE",
@@ -20,22 +21,24 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  const auth = getAuth(app);
 
-  // ── Expose Firebase helpers to global scope ──
   window.fbDb = db;
-  // Wrap ref() so it works correctly from outside the module
+  window.fbAuth = auth;
   window.fbRef = (path) => ref(db, path);
   window.fbSet = set;
   window.fbGet = get;
   window.fbOnValue = onValue;
   window.fbRemove = remove;
   window.fbUpdate = update;
+  window.fbSignIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.fbSignOut = () => signOut(auth);
+  window.fbOnAuth = (cb) => onAuthStateChanged(auth, cb);
 
-  // Signal that Firebase is ready
   window.firebaseReady = true;
-  // Small delay to ensure DOM is ready
-  setTimeout(() => document.dispatchEvent(new Event('firebaseReady')), 100);
+  document.dispatchEvent(new Event('firebaseReady'));
 </script>
+
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <style>
 /* ── THEMES ── */
@@ -616,7 +619,7 @@ body.sf-ready .mob-nav { display: flex !important; }
   <div class="modal">
     <div class="mh"><div class="mt">🔐 כניסת Admin</div><button class="mx" onclick="co('ovLogin')">✕</button></div>
     <div class="mb">
-      <div class="fr2"><label class="fl">שם משתמש</label><input class="fi" id="inU" placeholder="admin" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('inP').focus()"></div>
+      <div class="fr2"><label class="fl">אימייל Admin</label><input class="fi" id="inU" placeholder="admin@gmail.com" autocomplete="email" type="email" onkeydown="if(event.key==='Enter')document.getElementById('inP').focus()"></div>
       <div class="fr2"><label class="fl">סיסמה</label><input class="fi" type="password" id="inP" placeholder="סיסמה..." autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><div class="err" id="lerr">❌ שם משתמש או סיסמה שגויים</div></div>
       <button class="btn-r" onclick="doLogin()">כניסה</button>
       <button class="btn-g" onclick="co('ovLogin')">ביטול</button>
@@ -902,8 +905,9 @@ body.sf-ready .mob-nav { display: flex !important; }
 //  STATE
 // ══════════════════════════════════════════════
 const LS = 'sf_v5';
-let adminUser = 'Omer Admin';
-let adminPass = 'OmerAdminFamily7!';
+const ADMIN_UID = 'zgrs4HR0A7fJHqiGoZXm8QdNc5B3';
+const ADMIN_EMAIL = 'omergilboapc@gmail.com';
+let firebaseAuthUser = null; // Firebase Auth user object
 let isAdmin = false;
 let currentUser = null; // {id,name,avatar,color,pass}
 let users = []; // non-admin users
@@ -1042,13 +1046,13 @@ function addUserFromProfile() {
   oo('ovAddUser');
 }
 function loginAsAdmin() {
-  document.getElementById('inU').value = '';
+  document.getElementById('inU').value = ADMIN_EMAIL;
   document.getElementById('inP').value = '';
   document.getElementById('lerr').classList.remove('on');
-  // Raise login modal above profile screen (z-index 1000)
+  document.getElementById('lerr').textContent = '❌ אימייל או סיסמה שגויים';
   document.getElementById('ovLogin').style.zIndex = '1100';
   oo('ovLogin');
-  setTimeout(() => document.getElementById('inU').focus(), 300);
+  setTimeout(() => document.getElementById('inP').focus(), 300);
 }
 // (removed duplicate)
 // (removed duplicate tryPin)
@@ -1121,8 +1125,9 @@ function setupNavForUser() {
   renderGrid(); renderCW(); renderNotifs(); updateStats();
 }
 function switchProfile() {
-  currentUser = null; isAdmin = false;
+  currentUser = null; isAdmin = false; firebaseAuthUser = null;
   document.body.classList.remove('admin-mode');
+  if (window.fbSignOut) window.fbSignOut().catch(()=>{});
   showProfileScreen();
 }
 function checkRecNotifs() {
@@ -1142,18 +1147,20 @@ function checkRecNotifs() {
 // ══════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════
-function doLogin() {
-  const u = document.getElementById('inU').value.trim();
-  const p = document.getElementById('inP').value;
-  if (u === adminUser && p === adminPass) {
-    isAdmin = true; currentUser = { id: 'admin', name: 'Admin', avatar: '👑', color: '#3a0808' };
-    document.getElementById('ovLogin').style.zIndex = '';
-    co('ovLogin');
-    hideProfileScreen();
-    setupNavForUser();
-    toast('✅ ברוך הבא, Admin!', 's');
-  } else {
-    document.getElementById('lerr').classList.add('on');
+async function doLogin() {
+  const email = document.getElementById('inU').value.trim();
+  const pass = document.getElementById('inP').value;
+  const errEl = document.getElementById('lerr');
+  errEl.classList.remove('on');
+  const btn = document.querySelector('#ovLogin .btn-r');
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  try {
+    await window.fbSignIn(email, pass);
+    // onAuthStateChanged handles the rest
+  } catch(e) {
+    errEl.textContent = '❌ אימייל או סיסמה שגויים';
+    errEl.classList.add('on');
+    if (btn) { btn.textContent = 'כניסה'; btn.disabled = false; }
   }
 }
 
@@ -1397,11 +1404,7 @@ function saveName() {
   }
 }
 function changeAdminPass() {
-  const np = document.getElementById('newAdminPass').value;
-  if (np.length < 4) { toast('סיסמה חייבת להיות לפחות 4 תווים', 'e'); return; }
-  adminPass = np;
-  document.getElementById('newAdminPass').value = '';
-  save(); toast('✅ סיסמת Admin עודכנה', 's');
+  toast('לשינוי סיסמה — כנס ל-Firebase Console → Authentication → Users', 'i');
 }
 function applyStoredTheme() {
   const t = localStorage.getItem('sf_theme') || 'default';
@@ -2073,6 +2076,21 @@ async function init() {
   if (window.fbDb) {
     try { await load(); } catch(e) { console.warn('Firebase load error:', e); }
     try { listenForUpdates(); } catch(e) {}
+    // Setup Firebase Auth listener
+    try {
+      window.fbOnAuth((user) => {
+        if (user && user.uid === ADMIN_UID) {
+          firebaseAuthUser = user;
+          isAdmin = true;
+          currentUser = { id: 'admin', name: 'Admin', avatar: '👑', color: '#3a0808' };
+          document.getElementById('ovLogin').style.zIndex = '';
+          co('ovLogin');
+          hideProfileScreen();
+          setupNavForUser();
+          toast('✅ ברוך הבא, Admin!', 's');
+        }
+      });
+    } catch(e) {}
   }
   document.body.classList.add('sf-ready');
   renderProfileScreen();
