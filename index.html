@@ -907,8 +907,6 @@ body.sf-ready .mob-nav { display: flex !important; }
 const LS = 'sf_v5';
 const ADMIN_UID = 'zgrs4HR0A7fJHqiGoZXm8QdNc5B3';
 const ADMIN_EMAIL = 'omergilboapc@gmail.com';
-let adminUser = ADMIN_EMAIL;
-let adminPass = '';
 let firebaseAuthUser = null; // Firebase Auth user object
 let isAdmin = false;
 let currentUser = null; // {id,name,avatar,color,pass}
@@ -989,33 +987,22 @@ async function load() {
   } catch(e) { console.warn('Firebase load error:', e); }
 }
 
-// Listen for real-time updates so all users see changes instantly
+// Listen for real-time updates to lib/users (so all users see new content instantly)
 function listenForUpdates() {
   if (!window.fbDb) return;
-  window.fbOnValue(fbPath('shared'), (snap) => {
-    const data = snap && snap.val();
-    if (!data) return;
-
-    users = Array.isArray(data.users) ? data.users : users;
-    lib = Array.isArray(data.lib) ? data.lib : lib;
-    nid = typeof data.nid === 'number' ? data.nid : nid;
-    notifs = Array.isArray(data.notifs) ? data.notifs : notifs;
-    requests = Array.isArray(data.requests) ? data.requests : requests;
-    recommendations = data.recommendations || recommendations;
-
-    renderProfileScreen();
-    renderGrid();
-    renderCW();
-    renderNotifs();
-    updateStats();
-
-    if (document.getElementById('dashPage')?.classList.contains('open')) {
-      renderDashStats();
-      renderDashUsers();
-      renderDashRequests();
+  window.fbOnValue(fbPath('shared/lib'), (snap) => {
+    if (snap && snap.val()) {
+      const newLib = snap.val();
+      if (JSON.stringify(newLib) !== JSON.stringify(lib)) {
+        lib = newLib;
+        renderGrid(); updateStats();
+      }
     }
-    if (document.getElementById('reqPage')?.classList.contains('open')) {
-      renderReqList();
+  });
+  window.fbOnValue(fbPath('shared/notifs'), (snap) => {
+    if (snap && snap.val()) {
+      notifs = snap.val();
+      renderNotifs();
     }
   });
 }
@@ -1029,6 +1016,7 @@ function renderProfileScreen() {
   if (loading) loading.style.display = 'none';
   if (main) main.style.display = 'flex';
   const grid = document.getElementById('psGrid');
+  if (!grid) return;
   if (!grid) return;
   let html = '';
   // Admin tile
@@ -1227,7 +1215,7 @@ function updateStats() {
 function addNotifLocal(icon, title, sub, toId, itemId) {
   const now = new Date();
   const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} • ${now.toLocaleDateString('he-IL')}`;
-  notifs.push({ id: Date.now() + Math.random(), icon, title, sub, time, to: toId || 'all', itemId, read: [] });
+  notifs.push({ id: Date.now() + Math.random(), icon, title, sub, time, to: toId || 'all', itemId, read: [] }); if(notifs.length > 50) notifs = notifs.slice(-50);
   renderNotifs();
 }
 function renderNotifs() {
@@ -1236,7 +1224,7 @@ function renderNotifs() {
   const mine = notifs.filter(n => n.to === 'all' || n.to === uid).reverse();
   if (!mine.length) { list.innerHTML = '<div class="np-empty">אין התראות</div>'; updateBellDot(0); return; }
   list.innerHTML = mine.map(n => {
-    const unread = !n.read.includes(uid) ? 'unread' : '';
+    const unread = (n.read && n.read.includes(uid)) ? '' : 'unread';
     return `<div class="np-item ${unread}" onclick="clickNotif('${n.id}')">
       <div class="np-ico">${n.icon}</div>
       <div class="np-body"><div class="np-t">${esc(n.title)}</div><div class="np-s">${esc(n.sub)}</div><div class="np-time">${n.time}</div></div>
@@ -1251,7 +1239,7 @@ function updateBellDot(count) {
 }
 function markAllRead() {
   const uid = currentUser?.id || 'all';
-  notifs.forEach(n => { if (!n.read.includes(uid)) n.read.push(uid); });
+  notifs.forEach(n => { if (!n.read) n.read = []; if (!n.read) n.read = []; if (!n.read.includes(uid)) n.read.push(uid); });
   renderNotifs(); save();
 }
 function toggleBell() {
@@ -1263,7 +1251,7 @@ function clickNotif(id) {
   const n = notifs.find(x => String(x.id) === String(id));
   if (!n) return;
   const uid = currentUser?.id || 'all';
-  if (!n.read.includes(uid)) n.read.push(uid);
+  if (!n.read) n.read = []; if (!n.read.includes(uid)) n.read.push(uid);
   if (n.itemId) { closeBell(); openDetails(n.itemId); }
   renderNotifs(); save();
 }
@@ -2100,12 +2088,6 @@ async function init() {
           hideProfileScreen();
           setupNavForUser();
           toast('✅ ברוך הבא, Admin!', 's');
-        } else if (!user && isAdmin) {
-          firebaseAuthUser = null;
-          isAdmin = false;
-          currentUser = null;
-          document.body.classList.remove('admin-mode');
-          showProfileScreen();
         }
       });
     } catch(e) {}
@@ -2120,5 +2102,7 @@ if (document.readyState === 'loading') {
   init();
 }
 </script>
+</body>
+
 </body>
 </html>
